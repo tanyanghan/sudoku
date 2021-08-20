@@ -9,9 +9,47 @@ from sudoku_puzzles import puzzle
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 # defines
-CTRK_BTN_COL = 9
-GO_BTN_ROW = 8
+CTRL_BTN_COL = 9
+GO_BTN_ROW = 7
 QUIT_BTN_ROW = 0
+
+# This class displays a tooltip showing the possible values of a cell as the
+# mouse hovers over the cell grid
+class ToolTip(object):
+    def __init__(self, widget):
+        self.widget = widget
+        self.tipwindow = None
+
+    def showtip(self, text):
+        self.text = text
+        if self.tipwindow or not self.text:
+            logging.debug("returning")
+            return
+        x, y, cx, cy = self.widget.bbox("insert")
+        x = x + self.widget.winfo_rootx() + 57
+        y = y + cy + self.widget.winfo_rooty() +27
+        self.tipwindow = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(1)
+        tw.wm_geometry("+%d+%d" % (x, y))
+        try:
+            # For Mac OS
+            tw.tk.call("::tk::unsupported::MacWindowStyle",
+                       "style", tw._w,
+                       "help", "noActivates")
+        except tk.TclError:
+            pass
+        label = tk.Label(tw, text=self.text, justify=tk.LEFT,
+                      background="#ffffe0", relief=tk.SOLID, borderwidth=1,
+                      font=("tahoma", "14", "normal"))
+        label.pack(ipadx=1)
+        tw.update_idletasks()  # Needed on MacOS -- see #34275.
+        tw.lift()  # work around bug in Tk 8.5.18+ (issue #24570)
+
+    def hidetip(self):
+        tw = self.tipwindow
+        self.tipwindow = None
+        if tw:
+            tw.destroy()
 
 # This class defines a single cell on a Sudoku grid
 class Sudoku_Cell(tk.Button):
@@ -24,8 +62,18 @@ class Sudoku_Cell(tk.Button):
             self.cells_need_updating = False
         else:
             self.possible_values = [value]
-            self.config(text=str(value))
+            self.config(text=str(value), bg="#34abeb")
             self.cells_need_updating = True
+        # create a tooltip that shows the possible values of the cell
+        self.tooltip = ToolTip(self)
+        self.bind('<Enter>', self.enter_cb)
+        self.bind('<Leave>', self.leave_cb)
+
+    def enter_cb(self, event):
+        self.tooltip.showtip(str(self.possible_values))
+
+    def leave_cb(self, event):
+        self.tooltip.hidetip()
         
     def remove_possible_value(self,value):
         if len(self.possible_values) == 1:
@@ -41,8 +89,9 @@ class Sudoku_Cell(tk.Button):
             # value removed, check if we have arrived at an answer
             if len(self.possible_values) == 1:
                 # cell value has been determined, flag that we need to update
-                #other cells
-                self.config(text=str(self.possible_values[0]))
+                # other cells
+                self.config(text=str(self.possible_values[0]), 
+                            bg="#34abeb")
                 self.cells_need_updating = True
 
     def other_cells_need_updating(self):
@@ -53,11 +102,23 @@ class Sudoku_Cell(tk.Button):
         self.cells_need_updating = False
         return current_state
 
+    def set_value(self, value):
+        self.possible_values = [value]
+        self.config(text=str(self.possible_values[0]), 
+                    bg="#34abeb")
+        self.cells_need_updating = True
+
     def get_value(self):
         if len(self.possible_values) == 1:
             return self.possible_values[0]
         else:
             return 0
+
+    def get_possible_values(self):
+        if  len(self.possible_values) > 1:
+            return self.possible_values
+        else:
+            return []
 
     def __repr__(self):
         if len(self.possible_values) == 1:
@@ -90,7 +151,8 @@ class Sudoku_Grid(tk.Frame):
                 else:
                     cell_value = 0
                 cell = cell_class(self, cell_value)
-                cell.grid(row=row_index, column=col_index, sticky=tk.N+tk.S+tk.E+tk.W)
+                cell.grid(row=row_index, column=col_index, 
+                          sticky=tk.N+tk.S+tk.E+tk.W)
                 row.append(cell)
             self.my_grid.append(row)
 
@@ -102,10 +164,6 @@ class Sudoku_Grid(tk.Frame):
         # we need to keep track if any cells were updated
         updated = False
 
-        # we set the solved status to True here, and we check below for any 
-        # cell that doesn't have a value to reset it to false
-        self.solved = True
-
         # we loop through each cell on the grid
         for i in range(9):
             for j in range(9):
@@ -114,10 +172,13 @@ class Sudoku_Grid(tk.Frame):
                     self.__update_cells(i,j, self.my_grid[i][j].get_value())
                     # update the status that a cell was updated
                     updated = True
-                # check every cell for a value, if any cell has no value then
-                # the puzzle is still not solved
-                if not self.my_grid[i][j].get_value():
-                    self.solved = False
+
+        # check through each row/column/region for unique values
+        for row in range(9):
+            self.__check_unique(row,int((row*12)%9+(row/3)))
+
+        # check if the puzzle has been solved
+        self.is_solved()
 
         # We return the status whether any cells were updated.
         # We do this as long as the puzzle has not been solved. Once the puzzle
@@ -144,7 +205,65 @@ class Sudoku_Grid(tk.Frame):
                 # here we only update the cells in the correct region
                 self.my_grid[(qr_off)+i][(qc_off)+j].remove_possible_value(value)
 
+    def __check_unique(self,row,column):
+        # to update the region, we'll need to calculate an offset to the
+        # start of the region
+        qr_off = int(row/3)*3
+        qc_off = int(column/3)*3
+
+        # after we updated all the cells, we go through them again to see if
+        # each cell has a unique possible value
+        ROW = 0
+        COLUMN = 1
+        REGION = 2
+        possible_values = [[],[],[]]
+        solved_values = [[],[],[]]
+        for i in range(9):
+            possible_values[ROW].append(self.my_grid[row][i].get_possible_values())
+            solved_values[ROW].append(self.my_grid[row][i].get_value())
+            possible_values[COLUMN].append(self.my_grid[i][column].get_possible_values())
+            solved_values[COLUMN].append(self.my_grid[i][column].get_value())
+
+        for i in range(3):
+            for j in range(3):
+                # here we only update the cells in the correct region
+                possible_values[REGION].append(self.my_grid[(qr_off)+i][(qc_off)+j].get_possible_values())
+                solved_values[REGION].append(self.my_grid[(qr_off)+i][(qc_off)+j].get_value())
+
+        # find the unique values
+        unique_values = [[],[],[]]
+        for i in range(3):
+            all_possible_values = []
+            for values in possible_values[i]:
+                all_possible_values = all_possible_values + values
+            for possible_value in all_possible_values:
+                if all_possible_values.count(possible_value) == 1 and possible_value not in solved_values[i]:
+                    unique_values[i].append(possible_value)
+
+        # check if any unique values exist
+        for i in range(3):
+            for unique_value in unique_values[i]:
+                for values in possible_values[i]:
+                    if unique_value in values:
+                        index = possible_values[i].index(values)
+                        if i == ROW:
+                            self.my_grid[row][index].set_value(unique_value)
+                        elif i == COLUMN:
+                            self.my_grid[index][column].set_value(unique_value)
+                        elif i == REGION:
+                            self.my_grid[(qr_off)+int(index/3)][(qc_off)+(index-(int(index/3)*3))].set_value(unique_value)
+
     def is_solved(self):
+        # we set the solved status to True here, and we check below for any 
+        # cell that doesn't have a value to reset it to false
+        self.solved = True
+        # we loop through each cell on the grid
+        for i in range(9):
+            for j in range(9):
+                # check every cell for a value, if any cell has no value then
+                # the puzzle is still not solved
+                if not self.my_grid[i][j].get_value():
+                    self.solved = False
         return self.solved
 
     def __repr__(self):
@@ -176,7 +295,10 @@ def parseOptions():
     return args
 
 def go_btn_callback():
-    my_grid.update_grid()
+    if not my_grid.update_grid():
+        # once the puzzle has been solved, or if it is unsolvable, hide the 
+        # 'Go' button
+        go_btn.grid_forget()
     # if logging level set to debug, it will print each cell and the list
     # of possible values
     logging.debug(my_grid)
@@ -188,27 +310,40 @@ if __name__ == "__main__":
     args = parseOptions()
 
     root = tk.Tk()
+    root.title('Sudoku')
+    root.geometry('660x540')
     tk.Grid.rowconfigure(root, 0, weight=1)
     tk.Grid.columnconfigure(root, 0, weight=1)
 
     # instantiate a Sudoku grid with seed values
     my_grid = Sudoku_Grid(root, puzzle[args.puzzle_level])
 
+    # configure a column for the control buttons
+    tk.Grid.columnconfigure(my_grid, CTRL_BTN_COL, weight=2)
+
     # instantiate a 'Go' control button
-    go_btn = tk.Button(my_grid, text='Go', relief=tk.RAISED, command=go_btn_callback)
-    # configure the new column
-    tk.Grid.columnconfigure(my_grid, CTRK_BTN_COL, weight=2)
-    go_btn.grid(row=GO_BTN_ROW, column=CTRK_BTN_COL, sticky=tk.N+tk.S+tk.E+tk.W)
+    go_btn = tk.Button(my_grid, text='Go', bg="#3deb34",
+                           command=go_btn_callback)
 
-    quit_btn = tk.Button(my_grid, text="QUIT", fg="red",
-                              command=root.destroy)
-    quit_btn.grid(row=QUIT_BTN_ROW, column=CTRK_BTN_COL, sticky=tk.N+tk.S+tk.E+tk.W)
+    # add the 'Go' button to the control button column
+    go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
+                    sticky=tk.N+tk.S+tk.E+tk.W)
 
+    # instantiate a 'Quit' control button
+    quit_btn = tk.Button(my_grid, text="QUIT", bg="red",
+                             command=root.quit)
+
+    # add the 'Quit' button to the control button column
+    quit_btn.grid(row=QUIT_BTN_ROW, column=CTRL_BTN_COL, 
+                      sticky=tk.N+tk.S+tk.E+tk.W)
 
     root.mainloop()
 
     # after we exit the loop above, we check if the puzzle has been solved
+    my_grid.update_grid()
     if not my_grid.is_solved():
-        logging.info("Puzzle unsolvable")
+        logging.info("Puzzle not solved")
     else:
         logging.info("Puzzle solved!")
+
+    root.destroy()
