@@ -57,18 +57,19 @@ class ToolTip(object):
             tw.destroy()
 
 # This class defines a single cell on a Sudoku grid
-class Sudoku_Cell(tk.Button):
+class Sudoku_Cell(tk.Entry):
     def __init__(self, master=None, value=0):
         super().__init__(master)
         self.master = master
         # save the default background colour for use later
         self.original_bg = self.cget("bg")
+        self.cell_string = tk.StringVar()
         # set the font for the number grid
-        self.config(font=grid_font)
+        self.config(font=grid_font, textvariable=self.cell_string, justify="center")
         if not value:
             # no value given for this cell, initialize to all possible_values
             self.possible_values = [1,2,3,4,5,6,7,8,9]
-            self.config(text="")
+            self.cell_string.set("")
             self.cells_need_updating = False
         else:
             if isinstance(value, list):
@@ -127,7 +128,8 @@ class Sudoku_Cell(tk.Button):
         else:
             self.possible_values = [possible_values]
         self.cells_need_updating = False
-        self.config(text="", bg=self.original_bg)
+        self.cell_string.set("")
+        self.config(bg=self.original_bg)
         self.__check_value_set()
 
     def set_error(self):
@@ -137,8 +139,8 @@ class Sudoku_Cell(tk.Button):
         if len(self.possible_values) == 1:
             # cell value has been determined, flag that we need to update
             # other cells
-            self.config(text=str(self.possible_values[0]), 
-                        bg=CELL_FILLED_COLOUR)
+            self.cell_string.set(str(self.possible_values[0]))
+            self.config(bg=CELL_FILLED_COLOUR)
             self.cells_need_updating = True
 
     def __repr__(self):
@@ -160,18 +162,17 @@ class Sudoku_Grid(tk.Frame):
         super().__init__(master)
         self.master = master
         self.solved = False
-        self.grid(row=0, column=0, sticky=tk.N+tk.S+tk.E+tk.W)
         self.my_grid=[]
         for row_index in range(9):
             row = []
-            tk.Grid.rowconfigure(self, row_index, weight=1)
+            self.master.rowconfigure(row_index, weight=1)
             for col_index in range(9):
-                tk.Grid.columnconfigure(self, col_index, weight=1)
+                self.master.columnconfigure(col_index, weight=1)
                 if seed_values:
                     cell_value = seed_values[row_index][col_index]
                 else:
                     cell_value = 0
-                cell = cell_class(self, cell_value)
+                cell = cell_class(self.master, cell_value)
                 cell.grid(row=row_index, column=col_index, 
                           sticky=tk.N+tk.S+tk.E+tk.W)
                 row.append(cell)
@@ -444,8 +445,6 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.title('Sudoku')
     root.geometry('660x540')
-    tk.Grid.rowconfigure(root, 0, weight=1)
-    tk.Grid.columnconfigure(root, 0, weight=1)
 
     grid_font = tkFont.Font(family='Helvetica',size=24, weight='bold')
     control_font = tkFont.Font(family='Helvetica',size=18, weight='bold')
@@ -454,10 +453,10 @@ if __name__ == "__main__":
     my_grid = Sudoku_Grid(root, puzzle[args.puzzle_level])
 
     # configure a column for the control buttons
-    tk.Grid.columnconfigure(my_grid, CTRL_BTN_COL, weight=2)
+    my_grid.columnconfigure(CTRL_BTN_COL, weight=2)
 
     # instantiate a 'Go' control button
-    go_btn = tk.Button(my_grid, text='Go', bg="#3deb34",
+    go_btn = tk.Button(root, text='Go', bg="#3deb34",
                            font=control_font, command=go_btn_callback)
 
     # add the 'Go' button to the control button column
@@ -465,7 +464,7 @@ if __name__ == "__main__":
                     sticky=tk.N+tk.S+tk.E+tk.W)
 
     # instantiate a 'Quit' control button
-    quit_btn = tk.Button(my_grid, text="QUIT", bg="red",
+    quit_btn = tk.Button(root, text="QUIT", bg="red",
                              font=control_font, command=root.quit)
 
     # add the 'Quit' button to the control button column
@@ -473,11 +472,11 @@ if __name__ == "__main__":
                       sticky=tk.N+tk.S+tk.E+tk.W)
 
     # instantiate a 'Try' control button
-    try_btn = tk.Button(my_grid, text='Try', bg="#ffa500",
+    try_btn = tk.Button(root, text='Try', bg="#ffa500",
                            font=control_font, command=try_btn_callback)
 
     # instantiate a 'Revert' control button
-    revert_btn = tk.Button(my_grid, text='Revert', bg="#ffff00",
+    revert_btn = tk.Button(root, text='Revert', bg="#ffff00",
                            font=control_font, command=revert_btn_callback)
 
     root.mainloop()
