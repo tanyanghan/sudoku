@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 # defines
 CTRL_BTN_COL    = 9
 QUIT_BTN_ROW    = 0
+CLEAR_BTN_ROW   = 1
 REVERT_BTN_ROW  = 3
 TRY_BTN_ROW     = 5
 GO_BTN_ROW      = 7
@@ -65,7 +66,9 @@ class Sudoku_Cell(tk.Entry):
         self.original_bg = self.cget("bg")
         self.cell_string = tk.StringVar()
         # set the font for the number grid
-        self.config(font=grid_font, textvariable=self.cell_string, justify="center")
+        self.config(font=grid_font, textvariable=self.cell_string, justify="center", 
+                    disabledbackground="#d3d3d3", disabledforeground="blue")
+        self.bind("<KeyRelease>", self.entry_change) #keyup  
         if not value:
             # no value given for this cell, initialize to all possible_values
             self.possible_values = [1,2,3,4,5,6,7,8,9]
@@ -78,6 +81,7 @@ class Sudoku_Cell(tk.Entry):
             else:
                 # assign the given value as the value of this cell
                 self.possible_values = [value]
+                self.config(state='disabled')
             # check if the cell has been set to a value
             self.__check_value_set()
         # create a tooltip that shows the possible values of the cell
@@ -90,6 +94,19 @@ class Sudoku_Cell(tk.Entry):
 
     def leave_cb(self, event):
         self.tooltip.hidetip()
+
+    def entry_change(self, event):
+        try:
+            value = int(self.cell_string.get()[0])
+        except (ValueError, IndexError):
+            self.cell_string.set("")
+            self.possible_values = [1,2,3,4,5,6,7,8,9]
+            self.config(bg=self.original_bg)
+        else:
+            if value > 0 and value < 10:
+                self.set_state(value)
+        finally:
+            self.master.focus()
         
     def remove_possible_value(self,value):
         if len(self.possible_values) == 1:
@@ -126,10 +143,13 @@ class Sudoku_Cell(tk.Entry):
         if isinstance(possible_values, list):
             self.possible_values = possible_values
         else:
-            self.possible_values = [possible_values]
+            if not possible_values:
+                self.possible_values = [1,2,3,4,5,6,7,8,9]
+            else:
+                self.possible_values = [possible_values]
         self.cells_need_updating = False
         self.cell_string.set("")
-        self.config(bg=self.original_bg)
+        self.config(bg=self.original_bg, state="normal")
         self.__check_value_set()
 
     def set_error(self):
@@ -238,7 +258,9 @@ class Sudoku_Grid(tk.Frame):
         for i in range(3):
             for j in range(3):
                 # here we only update the cells in the correct region
-                if (row != (qr_off)+i and column != (qc_off)+j) and self.my_grid[(qr_off)+i][(qc_off)+j].get_value() == value:
+                if ( (row != (qr_off)+i and column != (qc_off)+j) and 
+                     (self.my_grid[(qr_off)+i][(qc_off)+j].get_value() == value)
+                   ):
                     self.my_grid[row][column].set_error()
                     self.my_grid[(qr_off)+i][(qc_off)+j].set_error()
                     raise AttributeError("Invalid cell (%d,%d) value: %d"%(row,column,value))
@@ -325,16 +347,20 @@ class Sudoku_Grid(tk.Frame):
         return self.solved
 
     def try_next(self, try_number=0):
-        # this function searches for a cell with 2 possible values, and sets
+        # This function searches for a cell with 2 possible values, and sets
         # the cell value to one of the two possible values. The parameter
-        # try_number determines which of the two possible values is used. 
+        # try_number determines which of the two possible values is used.
+        # It returns True if it successfully sets a cell, and False if it did
+        # not manage to set a cell.
         for row in self.my_grid:
             for cell in row:
                 possible_values = cell.get_possible_values()
                 if len(possible_values) == 2:
                     cell.set_state(possible_values[try_number])
-                    logging.info("Trying cell (%d,%d) value %d from %s"%(self.my_grid.index(row),row.index(cell),possible_values[try_number],possible_values))
-                    return
+                    logging.info("Trying cell (%d,%d) value %d from %s"%
+                        (self.my_grid.index(row),row.index(cell),possible_values[try_number],possible_values))
+                    return True
+        return False
 
     def get_state(self):
         # get_state returns the current state of the grid as a list of possible
@@ -373,6 +399,10 @@ def go_btn_callback():
                 # add the 'Try' button to the control button column
                 try_btn.grid(row=TRY_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
                                 sticky=tk.N+tk.S+tk.E+tk.W)
+            else:
+                # show the 'Clear' button because the puzzle is unsolvable
+                clear_btn.grid(row=CLEAR_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
+                                sticky=tk.N+tk.S+tk.E+tk.W)
     except AttributeError as e:
         # An AttributeError here means that a cell value clash has occurred.
         # Hide the 'Go' button
@@ -399,14 +429,19 @@ def try_btn_callback():
     grid_stack.append({'grid':copy.deepcopy(my_grid.get_state()), 'try_number':0})
     # next we tell the grid to try the first possibility of a cell with only
     # two possibilities
-    my_grid.try_next(0)
+    result = my_grid.try_next(0)
 
     # hide the try button
     try_btn.grid_forget()
 
-    # add the 'Go' button to the control button column
-    go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                    sticky=tk.N+tk.S+tk.E+tk.W)
+    if result:
+        # add the 'Go' button to the control button column
+        go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
+                        sticky=tk.N+tk.S+tk.E+tk.W)
+    else:
+        # show the 'Clear' button because the puzzle is unsolvable
+        clear_btn.grid(row=CLEAR_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
+                                sticky=tk.N+tk.S+tk.E+tk.W)
 
 def revert_btn_callback():
     while grid_stack and grid_stack[-1]['try_number'] == 1:
@@ -423,13 +458,24 @@ def revert_btn_callback():
     go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
                     sticky=tk.N+tk.S+tk.E+tk.W)
 
+def clear_btn_callback():
+    grid_stack = []
+
+    my_grid.reset_grid(puzzle['empty'])
+
+    clear_btn.grid_forget()
+
+    # add the 'Go' button to the control button column
+    go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
+                    sticky=tk.N+tk.S+tk.E+tk.W)
+
 def parseOptions():
     parser = argparse.ArgumentParser(description="A simple Sudoku puzzle solver")
 
     parser.add_argument("-p", "--puzzle_level", 
         help="Selects the difficulty level of the puzzle",
         choices=puzzle.keys(),
-        action="store", required=True)
+        action="store", required=False, default="empty")
 
     args = parser.parse_args()
 
@@ -478,6 +524,11 @@ if __name__ == "__main__":
     # instantiate a 'Revert' control button
     revert_btn = tk.Button(root, text='Revert', bg="#ffff00",
                            font=control_font, command=revert_btn_callback)
+
+    # instantiate a 'Clear' control button
+    clear_btn = tk.Button(root, text='Clear', bg="#ff00ff",
+                           font=control_font, command=clear_btn_callback)
+
 
     root.mainloop()
 
