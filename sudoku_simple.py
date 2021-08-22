@@ -177,10 +177,10 @@ class Sudoku_Grid(tk.Frame):
                 row.append(cell)
             self.my_grid.append(row)
 
-    def reset_grid(self, seed_values=[]):
-        for i in range(9):
-            for j in range(9):
-                self.my_grid[i][j].set_state(seed_values[i][j])
+    def reset_grid(self, seed_values):
+        for (grid_row, seed_row) in zip(self.my_grid, seed_values):
+            for cell, seed_value in zip(grid_row, seed_row):
+                cell.set_state(seed_value)
 
     def update_grid(self):
         # This function returns True if any cells were updated, and false if
@@ -191,11 +191,11 @@ class Sudoku_Grid(tk.Frame):
         updated = False
 
         # we loop through each cell on the grid
-        for i in range(9):
-            for j in range(9):
+        for row in self.my_grid:
+            for cell in row: 
                 # we check the cell if it needs other cells updating
-                if self.my_grid[i][j].other_cells_need_updating():
-                    self.__update_cells(i,j, self.my_grid[i][j].get_value())
+                if cell.other_cells_need_updating():
+                    self.__update_cells(self.my_grid.index(row),row.index(cell),cell.get_value())
                     # update the status that a cell was updated
                     updated = True
 
@@ -315,11 +315,11 @@ class Sudoku_Grid(tk.Frame):
         # cell that doesn't have a value to reset it to false
         self.solved = True
         # we loop through each cell on the grid
-        for i in range(9):
-            for j in range(9):
+        for row in self.my_grid:
+            for cell in row:               
                 # check every cell for a value, if any cell has no value then
                 # the puzzle is still not solved
-                if not self.my_grid[i][j].get_value():
+                if not cell.get_value():
                     self.solved = False
         return self.solved
 
@@ -327,38 +327,38 @@ class Sudoku_Grid(tk.Frame):
         # this function searches for a cell with 2 possible values, and sets
         # the cell value to one of the two possible values. The parameter
         # try_number determines which of the two possible values is used. 
-        for i in range(9):
-            for j in range(9):
-                possible_values = self.my_grid[i][j].get_possible_values()
+        for row in self.my_grid:
+            for cell in row:
+                possible_values = cell.get_possible_values()
                 if len(possible_values) == 2:
-                    self.my_grid[i][j].set_state(possible_values[try_number])
-                    logging.info("Trying cell (%d,%d) value %d from %s"%(i,j,possible_values[try_number],possible_values))
+                    cell.set_state(possible_values[try_number])
+                    logging.info("Trying cell (%d,%d) value %d from %s"%(self.my_grid.index(row),row.index(cell),possible_values[try_number],possible_values))
                     return
 
     def get_state(self):
         # get_state returns the current state of the grid as a list of possible
         # value
         state = []
-        for i in range(9):
-            row = []
-            for j in range(9):
-                row.append(self.my_grid[i][j].get_possible_values())
-            state.append(row)
+        for row in self.my_grid:
+            row_values = []
+            for cell in row:
+                row_values.append(cell.get_possible_values())
+            state.append(row_values)
         return state
 
     def __repr__(self):
         string = ""
-        for i in range(9):
-            for j in range(9):
-                string += " %r"%self.my_grid[i][j]
+        for row in self.my_grid:
+            for cell in row:
+                string += " %r"%cell
             string += "\n\r"
         return string
 
     def __str__(self):
         string = ""
-        for i in range(9):
-            for j in range(9):
-                string += "row %d column %d: %s"%(i,j,self.my_grid[i][j])
+        for row in self.my_grid:
+            for cell in row:
+                string += "row %d column %d: %s"%(self.my_grid.index(row),row.index(cell),cell)
                 string += "\n\r"
         return string
 
