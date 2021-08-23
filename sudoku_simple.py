@@ -10,7 +10,7 @@ from sudoku_puzzles import puzzle
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 # defines
-CTRL_BTN_COL    = 9
+CTRL_BTN_COL    = 1
 QUIT_BTN_ROW    = 0
 CLEAR_BTN_ROW   = 1
 REVERT_BTN_ROW  = 3
@@ -23,8 +23,9 @@ GRID_DIMENSION  = 60
 CTRL_COLUMNSPAN = 2
 NUM_COLUMNS     = (9+CTRL_COLUMNSPAN)
 NUM_ROWS        = 9
-WINDOW_WIDTH    = (GRID_DIMENSION * NUM_COLUMNS)
-WINDOW_HEIGHT   = (GRID_DIMENSION * NUM_ROWS)
+PAD_WIDTH       = 3
+WINDOW_WIDTH    = (GRID_DIMENSION * NUM_COLUMNS + (PAD_WIDTH*2))
+WINDOW_HEIGHT   = (GRID_DIMENSION * NUM_ROWS  + (PAD_WIDTH*2))
 
 # This class displays a tooltip showing the possible values of a cell as the
 # mouse hovers over the cell grid
@@ -190,18 +191,28 @@ class Sudoku_Grid(tk.Frame):
         self.master = master
         self.solved = False
         self.my_grid=[]
+        self.configure(background="black")
         for row_index in range(9):
             row = []
-            self.master.rowconfigure(row_index, weight=1)
+            if row_index > 0 and row_index%3 == 0:
+                pady_top = PAD_WIDTH
+            else:
+                pady_top = 0
+            self.rowconfigure(row_index, weight=1)
             for col_index in range(9):
-                self.master.columnconfigure(col_index, weight=1)
+                self.columnconfigure(col_index, weight=1)
                 if seed_values:
                     cell_value = seed_values[row_index][col_index]
                 else:
                     cell_value = 0
-                cell = cell_class(self.master, cell_value)
+                cell = cell_class(self, cell_value)
+                if col_index > 0 and col_index%3 == 0:
+                    padx_left = PAD_WIDTH
+                else:
+                    padx_left = 0
                 cell.grid(row=row_index, column=col_index, 
-                          sticky=tk.N+tk.S+tk.E+tk.W)
+                          sticky=tk.N+tk.S+tk.E+tk.W,
+                          padx=(padx_left,0), pady=(pady_top,0))
                 row.append(cell)
             self.my_grid.append(row)
 
@@ -502,18 +513,30 @@ if __name__ == "__main__":
     # get the chosen puzzle difficulty level
     args = parseOptions()
 
+    # instantiate the tkinter root, and set the title and geometry
     root = tk.Tk()
     root.title('Sudoku')
     root.geometry('%dx%d'%(WINDOW_WIDTH, WINDOW_HEIGHT))
+   
+    # configure column 0 of the root grid
+    root.columnconfigure(0, weight=1)
 
+    # configure column 1 of the root grid for the control buttons
+    root.columnconfigure(CTRL_BTN_COL, weight=0, minsize=GRID_DIMENSION*CTRL_COLUMNSPAN)
+
+    # configure 9 rows of the root grid
+    for i in range(9):
+        root.rowconfigure(i, weight=1)
+
+    # prep the fonts we will be using
     grid_font = tkFont.Font(family='Helvetica',size=24, weight='bold')
     control_font = tkFont.Font(family='Helvetica',size=18, weight='bold')
 
     # instantiate a Sudoku grid with seed values
     my_grid = Sudoku_Grid(root, puzzle[args.puzzle_level])
 
-    # configure a column for the control buttons
-    root.columnconfigure(CTRL_BTN_COL, weight=0, minsize=GRID_DIMENSION*CTRL_COLUMNSPAN)
+    # add the Sudoku grid to root grid at row 0, column 0
+    my_grid.grid(row=0, column=0, sticky=tk.N+tk.S+tk.E+tk.W, rowspan=9)
 
     # instantiate a 'Go' control button
     go_btn = tk.Button(root, text='Go', bg="#3deb34",
