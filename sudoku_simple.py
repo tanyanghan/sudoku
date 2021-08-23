@@ -19,6 +19,13 @@ GO_BTN_ROW      = 7
 
 CELL_FILLED_COLOUR = "#34abeb"
 
+GRID_DIMENSION  = 60
+CTRL_COLUMNSPAN = 2
+NUM_COLUMNS     = (9+CTRL_COLUMNSPAN)
+NUM_ROWS        = 9
+WINDOW_WIDTH    = (GRID_DIMENSION * NUM_COLUMNS)
+WINDOW_HEIGHT   = (GRID_DIMENSION * NUM_ROWS)
+
 # This class displays a tooltip showing the possible values of a cell as the
 # mouse hovers over the cell grid
 class ToolTip(object):
@@ -199,6 +206,8 @@ class Sudoku_Grid(tk.Frame):
             self.my_grid.append(row)
 
     def reset_grid(self, seed_values):
+        # this function will take the output from Sudoku_Grid.get_state() as 
+        # the 'seed_values' parameter, and reset the state of the grid 
         for (grid_row, seed_row) in zip(self.my_grid, seed_values):
             for cell, seed_value in zip(grid_row, seed_row):
                 cell.set_state(seed_value)
@@ -350,8 +359,8 @@ class Sudoku_Grid(tk.Frame):
         # This function searches for a cell with 2 possible values, and sets
         # the cell value to one of the two possible values. The parameter
         # try_number determines which of the two possible values is used.
-        # It returns True if it successfully sets a cell, and False if it did
-        # not manage to set a cell.
+        # It returns True if it successfully sets a cell, or returns False if
+        # it did not manage to set a cell.
         for row in self.my_grid:
             for cell in row:
                 possible_values = cell.get_possible_values()
@@ -394,27 +403,24 @@ def go_btn_callback():
         if not my_grid.update_grid():
             # once the puzzle has been solved, or if it is unsolvable, hide the 
             # 'Go' button
-            go_btn.grid_forget()
+            go_btn.grid_remove()
             if not my_grid.is_solved():
                 # add the 'Try' button to the control button column
-                try_btn.grid(row=TRY_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                                sticky=tk.N+tk.S+tk.E+tk.W)
+                try_btn.grid()
             else:
                 # show the 'Clear' button because the puzzle is unsolvable
-                clear_btn.grid(row=CLEAR_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                                sticky=tk.N+tk.S+tk.E+tk.W)
+                clear_btn.grid()
     except AttributeError as e:
         # An AttributeError here means that a cell value clash has occurred.
         # Hide the 'Go' button
-        go_btn.grid_forget()
+        go_btn.grid_remove()
 
         # If the grid stack is not empty, it means we can revert to a prior
         # grid state.
         if grid_stack:
             # Show the 'Revert' button to allow the user to revert to a prior
             # grid state
-            revert_btn.grid(row=REVERT_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                                sticky=tk.N+tk.S+tk.E+tk.W)
+            revert_btn.grid()
         # we log the clash cell coordinate and the value
         logging.error(str(e))
 
@@ -432,42 +438,50 @@ def try_btn_callback():
     result = my_grid.try_next(0)
 
     # hide the try button
-    try_btn.grid_forget()
+    try_btn.grid_remove()
 
     if result:
         # add the 'Go' button to the control button column
-        go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                        sticky=tk.N+tk.S+tk.E+tk.W)
+        go_btn.grid()
     else:
         # show the 'Clear' button because the puzzle is unsolvable
-        clear_btn.grid(row=CLEAR_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                                sticky=tk.N+tk.S+tk.E+tk.W)
+        clear_btn.grid()
 
 def revert_btn_callback():
+    result = False
+    # we pop the grids that we have already tried both possibilities, off the
+    # stack
     while grid_stack and grid_stack[-1]['try_number'] == 1:
         grid_stack.pop()
+    # if the grid stack is not empty, we try the second possibility of the last
+    # grid on the stack
     if grid_stack:
         grid_stack[-1]['try_number'] = 1
         my_grid.reset_grid(grid_stack[-1]['grid'])
-        my_grid.try_next(1)
+        result = my_grid.try_next(1)
 
     # hide the revert button
-    revert_btn.grid_forget()
+    revert_btn.grid_remove()
 
-    # add the 'Go' button to the control button column
-    go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                    sticky=tk.N+tk.S+tk.E+tk.W)
+    if result:
+        # add the 'Go' button to the control button column
+        go_btn.grid()
+    else:
+        # show the 'Clear' button because the puzzle is unsolvable
+        clear_btn.grid()
 
 def clear_btn_callback():
+    # clear the grid stack
     grid_stack = []
 
+    # reset the grid to empty
     my_grid.reset_grid(puzzle['empty'])
 
-    clear_btn.grid_forget()
+    # hide the 'Clear' button
+    clear_btn.grid_remove()
 
     # add the 'Go' button to the control button column
-    go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
-                    sticky=tk.N+tk.S+tk.E+tk.W)
+    go_btn.grid()
 
 def parseOptions():
     parser = argparse.ArgumentParser(description="A simple Sudoku puzzle solver")
@@ -490,7 +504,7 @@ if __name__ == "__main__":
 
     root = tk.Tk()
     root.title('Sudoku')
-    root.geometry('660x540')
+    root.geometry('%dx%d'%(WINDOW_WIDTH, WINDOW_HEIGHT))
 
     grid_font = tkFont.Font(family='Helvetica',size=24, weight='bold')
     control_font = tkFont.Font(family='Helvetica',size=18, weight='bold')
@@ -499,14 +513,14 @@ if __name__ == "__main__":
     my_grid = Sudoku_Grid(root, puzzle[args.puzzle_level])
 
     # configure a column for the control buttons
-    my_grid.columnconfigure(CTRL_BTN_COL, weight=2)
+    root.columnconfigure(CTRL_BTN_COL, weight=0, minsize=GRID_DIMENSION*CTRL_COLUMNSPAN)
 
     # instantiate a 'Go' control button
     go_btn = tk.Button(root, text='Go', bg="#3deb34",
                            font=control_font, command=go_btn_callback)
 
     # add the 'Go' button to the control button column
-    go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2 ,
+    go_btn.grid(row=GO_BTN_ROW, column=CTRL_BTN_COL, rowspan=2,
                     sticky=tk.N+tk.S+tk.E+tk.W)
 
     # instantiate a 'Quit' control button
@@ -521,14 +535,30 @@ if __name__ == "__main__":
     try_btn = tk.Button(root, text='Try', bg="#ffa500",
                            font=control_font, command=try_btn_callback)
 
+    # add the 'Try' button to the control button column
+    try_btn.grid(row=TRY_BTN_ROW, column=CTRL_BTN_COL, rowspan=2,
+                    sticky=tk.N+tk.S+tk.E+tk.W)
+
     # instantiate a 'Revert' control button
     revert_btn = tk.Button(root, text='Revert', bg="#ffff00",
                            font=control_font, command=revert_btn_callback)
+
+    # add the 'Revert' button to the control button column
+    revert_btn.grid(row=REVERT_BTN_ROW, column=CTRL_BTN_COL, rowspan=2,
+                        sticky=tk.N+tk.S+tk.E+tk.W)
 
     # instantiate a 'Clear' control button
     clear_btn = tk.Button(root, text='Clear', bg="#ff00ff",
                            font=control_font, command=clear_btn_callback)
 
+    # add the 'Clear' button to the control button column
+    clear_btn.grid(row=CLEAR_BTN_ROW, column=CTRL_BTN_COL, rowspan=2,
+                        sticky=tk.N+tk.S+tk.E+tk.W)
+
+    # hide the 'Try', 'Revert' and 'Clear' buttons
+    try_btn.grid_remove()
+    revert_btn.grid_remove()
+    clear_btn.grid_remove()
 
     root.mainloop()
 
