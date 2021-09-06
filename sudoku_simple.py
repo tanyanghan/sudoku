@@ -76,22 +76,11 @@ class Sudoku_Cell(tk.Entry):
         # set the font for the number grid
         self.config(font=grid_font, textvariable=self.cell_string, justify="center", 
                     disabledbackground="#d3d3d3", disabledforeground="blue")
-        self.bind("<KeyRelease>", self.entry_change) #keyup  
-        if not value:
-            # no value given for this cell, initialize to all possible_values
-            self.possible_values = [1,2,3,4,5,6,7,8,9]
-            self.cell_string.set("")
-            self.cells_need_updating = False
-        else:
-            if isinstance(value, list):
-                # if value is a list, assume it's the list of possible_values
-                self.possible_values = value
-            else:
-                # assign the given value as the value of this cell
-                self.possible_values = [value]
-                self.config(state='disabled')
-            # check if the cell has been set to a value
-            self.__check_value_set()
+        # set the state of the cell
+        self.set_state(value, 'disabled')
+        # bind key-up and focus-in events
+        self.bind("<KeyRelease>", self.entry_change) #keyup
+        self.bind('<FocusIn>', self.on_focus)
         # create a tooltip that shows the possible values of the cell
         self.tooltip = ToolTip(self)
         self.bind('<Enter>', self.enter_cb)
@@ -107,14 +96,16 @@ class Sudoku_Cell(tk.Entry):
         try:
             value = int(self.cell_string.get()[0])
         except (ValueError, IndexError):
-            self.cell_string.set("")
-            self.possible_values = [1,2,3,4,5,6,7,8,9]
-            self.config(bg=self.original_bg)
+            self.__reset_cell()
         else:
             if value > 0 and value < 10:
                 self.set_state(value)
         finally:
             self.master.focus()
+
+    def on_focus(self, event):
+        # when the cell is focused on, set the cursor position the start
+        self.icursor(0)
         
     def remove_possible_value(self,value):
         if len(self.possible_values) == 1:
@@ -147,29 +138,45 @@ class Sudoku_Cell(tk.Entry):
     def get_possible_values(self):
         return self.possible_values
 
-    def set_state(self, possible_values):
-        if isinstance(possible_values, list):
-            self.possible_values = possible_values
-        else:
-            if not possible_values:
-                self.possible_values = [1,2,3,4,5,6,7,8,9]
+    def set_state(self, value, state="normal"):
+        # first, reset cell to empty state
+        self.__reset_cell()
+        # check if value is a list
+        if isinstance(value, list):
+            # check that possible values in the list are valid
+            if len(value) > 0 and len(value) < 10:
+                for this_value in value:
+                    if this_value < 1 or this_value > 9:
+                        if this_value == 0 and len(value) == 1:
+                            # we assume a single zero value means an empty cell
+                            return
+                        raise AttributeError("Trying to set invalid state: %d in %s"%(this_value, str(value)))
+                self.possible_values = value
             else:
-                self.possible_values = [possible_values]
-        self.cells_need_updating = False
-        self.cell_string.set("")
-        self.config(bg=self.original_bg, state="normal")
-        self.__check_value_set()
+                raise AttributeError("Trying to set invalid state: %s"%str(value))
+        else:
+            # value is not a list, check that the single value is valid
+            if value > 0 and value < 10:
+                self.possible_values = [value]
+        # finally, we check if this cell has a final value set
+        self.__check_value_set(state)
 
     def set_error(self):
         self.config(bg="red")
 
-    def __check_value_set(self):
+    def __check_value_set(self, state="normal"):
         if len(self.possible_values) == 1:
             # cell value has been determined, flag that we need to update
             # other cells
             self.cell_string.set(str(self.possible_values[0]))
-            self.config(bg=CELL_FILLED_COLOUR)
+            self.config(bg=CELL_FILLED_COLOUR, state=state)
             self.cells_need_updating = True
+
+    def __reset_cell(self):
+        self.cell_string.set("")
+        self.possible_values = [1,2,3,4,5,6,7,8,9]
+        self.cells_need_updating = False
+        self.config(bg=self.original_bg, state="normal")
 
     def __repr__(self):
         if len(self.possible_values) == 1:
